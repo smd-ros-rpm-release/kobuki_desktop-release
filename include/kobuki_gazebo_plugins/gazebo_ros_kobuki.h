@@ -40,12 +40,15 @@
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <gazebo.hh>
-#include <physics/physics.hh>
 #include <common/common.hh>
 #include <common/Time.hh>
+#include <math/gzmath.hh>
+#include <physics/physics.hh>
 #include <sensors/sensors.hh>
 #include <ros/ros.h>
+#include <std_msgs/Empty.h>
 #include <std_msgs/Float64.h>
+#include <sensor_msgs/Imu.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -77,6 +80,8 @@ private:
   void cmdVelCB(const geometry_msgs::TwistConstPtr &msg);
   /// Callback for incoming velocity commands
   void motorPowerCB(const kobuki_msgs::MotorPowerPtr &msg);
+  /// Callback for resetting the odometry data
+  void resetOdomCB(const std_msgs::EmptyConstPtr &msg);
   /// Spin method for the spinner thread
   void spin();
   //  void OnContact(const std::string &name, const physics::Contact &contact); necessary?
@@ -119,19 +124,19 @@ private:
   /// Simulation time of the last velocity command (used for time out)
   common::Time last_cmd_vel_time_;
   /// Time out for velocity commands in seconds
-  float cmd_vel_timeout_;
+  double cmd_vel_timeout_;
   /// Speeds of the wheels
-  float wheel_speed_cmd_[2];
+  double wheel_speed_cmd_[2];
   /// Max. torque applied to the wheels
-  float torque_;
+  double torque_;
   /// Separation between the wheels
-  float wheel_sep_;
+  double wheel_sep_;
   /// Diameter of the wheels
-  float wheel_diam_;
+  double wheel_diam_;
   /// Vector for pose
-  float odom_pose_[3];
+  double odom_pose_[3];
   /// Vector for velocity
-  float odom_vel_[3];
+  double odom_vel_[3];
   /// Pointer to pose covariance matrix
   double *pose_cov_[36];
   /// Pointer to twist covariance matrix
@@ -149,27 +154,51 @@ private:
   /// Pointer to left cliff sensor
   sensors::RaySensorPtr cliff_sensor_left_;
   /// Pointer to frontal cliff sensor
-  sensors::RaySensorPtr cliff_sensor_front_;
+  sensors::RaySensorPtr cliff_sensor_center_;
   /// Pointer to left right sensor
   sensors::RaySensorPtr cliff_sensor_right_;
   /// ROS publisher for cliff detection events
   ros::Publisher cliff_event_pub_;
   /// Kobuki ROS message for cliff event
   kobuki_msgs::CliffEvent cliff_event_;
-  /// Storage for last cliff sensor state state for checking if something has changed
-  kobuki_msgs::CliffEvent cliff_event_old_;
+  /// Cliff flag for the left sensor
+  bool cliff_detected_left_;
+  /// Cliff flag for the center sensor
+  bool cliff_detected_center_;
+  /// Cliff flag for the right sensor
+  bool cliff_detected_right_;
   /// measured distance in meter for detecting a cliff
   float cliff_detection_threshold_;
   /// Maximum distance to floor
-  int max_floot_dist_;
+  int floot_dist_;
   /// Pointer to bumper sensor simulating Kobuki's left, centre and right bumper sensors
   sensors::ContactSensorPtr bumper_;
   /// ROS publisher for bumper events
   ros::Publisher bumper_event_pub_;
   /// Kobuki ROS message for bumper event
   kobuki_msgs::BumperEvent bumper_event_;
-  /// Storage for last bumper sensor state state for checking if something has changed
-  kobuki_msgs::BumperEvent bumper_event_old_;
+  /// Flag for left bumper's last state
+  bool bumper_left_was_pressed_;
+  /// Flag for center bumper's last state
+  bool bumper_center_was_pressed_;
+  /// Flag for right bumper's last state
+  bool bumper_right_was_pressed_;
+  /// Flag for left bumper's current state
+  bool bumper_left_is_pressed_;
+  /// Flag for left bumper's current state
+  bool bumper_center_is_pressed_;
+  /// Flag for left bumper's current state
+  bool bumper_right_is_pressed_;
+  /// Pointer to IMU sensor model
+  sensors::ImuSensorPtr imu_;
+  /// Storage for the angular velocity reported by the IMU
+  math::Vector3 vel_angular_;
+  /// ROS publisher for IMU data
+  ros::Publisher imu_pub_;
+  /// ROS message for publishing IMU data
+  sensor_msgs::Imu imu_msg_;
+  /// ROS subscriber for reseting the odometry data
+  ros::Subscriber odom_reset_sub_;
 };
 
 } // namespace gazebo
