@@ -56,8 +56,12 @@ GazeboRosKobuki::GazeboRosKobuki() : shutdown_requested_(false)
     return;
   }
 
+  // Initialise variables
   wheel_speed_cmd_[LEFT] = 0.0;
   wheel_speed_cmd_[RIGHT] = 0.0;
+  cliff_detected_left_ = false;
+  cliff_detected_center_ = false;
+  cliff_detected_right_ = false;
 }
 
 GazeboRosKobuki::~GazeboRosKobuki()
@@ -88,13 +92,6 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
   node_name_ = model_name;
 
   world_ = parent->GetWorld();
-
-// TODO: use when implementing subs
-//  ros_spinner_thread_ = new boost::thread(boost::bind(&GazeboRosKobuki::spin, this));
-//
-//  this->node_namespace_ = "";
-//  if (_sdf->HasElement("node_namespace"))
-//    this->node_namespace_ = _sdf->GetElement("node_namespace")->Get<std::string>() + "/";
 
   /*
    * Prepare receiving motor power commands
@@ -195,7 +192,11 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
                      << " Did you specify it?" << " [" << node_name_ <<"]");
     return;
   }
+  odom_pose_[0] = 0.0;
+  odom_pose_[1] = 0.0;
+  odom_pose_[2] = 0.0;
   odom_pub_ = nh_.advertise<nav_msgs::Odometry>("odom", 1);
+  odom_reset_sub_ = nh_priv_.subscribe("commands/reset_odometry", 10, &GazeboRosKobuki::resetOdomCB, this);
 
   /*
    * Prepare receiving velocity commands
@@ -216,7 +217,7 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
   /*
    * Prepare cliff sensors
    */
-  std::string cliff_sensor_left_name, cliff_sensor_front_name, cliff_sensor_right_name;
+  std::string cliff_sensor_left_name, cliff_sensor_center_name, cliff_sensor_right_name;
   if (sdf->HasElement("cliff_sensor_left_name"))
   {
     cliff_sensor_left_name = sdf->GetElement("cliff_sensor_left_name")->Get<std::string>();
@@ -227,9 +228,9 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
                      << " Did you specify it?" << " [" << node_name_ <<"]");
     return;
   }
-  if (sdf->HasElement("cliff_sensor_front_name"))
+  if (sdf->HasElement("cliff_sensor_center_name"))
   {
-    cliff_sensor_front_name = sdf->GetElement("cliff_sensor_front_name")->Get<std::string>();
+    cliff_sensor_center_name = sdf->GetElement("cliff_sensor_center_name")->Get<std::string>();
   }
   else
   {
@@ -249,8 +250,8 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
   }
   cliff_sensor_left_ = boost::shared_dynamic_cast<sensors::RaySensor>(
                        sensors::SensorManager::Instance()->GetSensor(cliff_sensor_left_name));
-  cliff_sensor_front_ = boost::shared_dynamic_cast<sensors::RaySensor>(
-                        sensors::SensorManager::Instance()->GetSensor(cliff_sensor_front_name));
+  cliff_sensor_center_ = boost::shared_dynamic_cast<sensors::RaySensor>(
+                        sensors::SensorManager::Instance()->GetSensor(cliff_sensor_center_name));
   cliff_sensor_right_ = boost::shared_dynamic_cast<sensors::RaySensor>(
                         sensors::SensorManager::Instance()->GetSensor(cliff_sensor_right_name));
   if (!cliff_sensor_left_)
@@ -258,9 +259,9 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
     ROS_ERROR_STREAM("Couldn't find the left cliff sensor in the model! [" << node_name_ <<"]");
     return;
   }
-  if (!cliff_sensor_front_)
+  if (!cliff_sensor_center_)
   {
-    ROS_ERROR_STREAM("Couldn't find the frontal cliff sensor in the model! [" << node_name_ <<"]");
+    ROS_ERROR_STREAM("Couldn't find the center cliff sensor in the model! [" << node_name_ <<"]");
     return;
   }
   if (!cliff_sensor_right_)
@@ -279,7 +280,7 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
     return;
   }
   cliff_sensor_left_->SetActive(true);
-  cliff_sensor_front_->SetActive(true);
+  cliff_sensor_center_->SetActive(true);
   cliff_sensor_right_->SetActive(true);
   cliff_event_pub_ = nh_priv_.advertise<kobuki_msgs::CliffEvent>("events/cliff", 1);
 
@@ -307,12 +308,36 @@ void GazeboRosKobuki::Load(physics::ModelPtr parent, sdf::ElementPtr sdf)
   bumper_->SetActive(true);
   bumper_event_pub_ = nh_priv_.advertise<kobuki_msgs::BumperEvent>("events/bumper", 1);
 
+  /*
+   * Prepare IMU
+   */
+  std::string imu_name;
+  if (sdf->HasElement("imu_name"))
+  {
+  imu_name = sdf->GetElement("imu_name")->Get<std::string>();
+  }
+  else
+  {
+    ROS_ERROR_STREAM("Couldn't find the name of IMU sensor in the model description!"
+                     << " Did you specify it?" << " [" << node_name_ <<"]");
+    return;
+  }
+  imu_ = boost::shared_dynamic_cast<sensors::ImuSensor>(
+            sensors::SensorManager::Instance()->GetSensor(imu_name));
+  if (!imu_)
+  {
+    ROS_ERROR_STREAM("Couldn't find the IMU in the model! [" << node_name_ <<"]");
+    return;
+  }
+  imu_->SetActive(true);
+  imu_pub_ = nh_priv_.advertise<sensor_msgs::Imu>("sensors/imu_data", 1);
+
   prev_update_time_ = world_->GetSimTime();
   ROS_INFO_STREAM("GazeboRosKobuki plugin ready to go! [" << node_name_ << "]");
   update_connection_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboRosKobuki::OnUpdate, this));
 }
 
-void GazeboRosKobuki::motorPowerCB( const kobuki_msgs::MotorPowerPtr &msg)
+void GazeboRosKobuki::motorPowerCB(const kobuki_msgs::MotorPowerPtr &msg)
 {
   if ((msg->state == kobuki_msgs::MotorPower::ON) && (!motors_enabled_))
   {
@@ -326,11 +351,18 @@ void GazeboRosKobuki::motorPowerCB( const kobuki_msgs::MotorPowerPtr &msg)
   }
 }
 
-void GazeboRosKobuki::cmdVelCB( const geometry_msgs::TwistConstPtr &msg)
+void GazeboRosKobuki::cmdVelCB(const geometry_msgs::TwistConstPtr &msg)
 {
   last_cmd_vel_time_ = world_->GetSimTime();
   wheel_speed_cmd_[LEFT] = msg->linear.x - msg->angular.z * (wheel_sep_) / 2;
   wheel_speed_cmd_[RIGHT] = msg->linear.x + msg->angular.z * (wheel_sep_) / 2;
+}
+
+void GazeboRosKobuki::resetOdomCB(const std_msgs::EmptyConstPtr &msg)
+{
+  odom_pose_[0] = 0.0;
+  odom_pose_[1] = 0.0;
+  odom_pose_[2] = 0.0;
 }
 
 void GazeboRosKobuki::OnUpdate()
@@ -351,6 +383,7 @@ void GazeboRosKobuki::OnUpdate()
    * Joint states
    */
   joint_state_.header.stamp = ros::Time::now();
+  joint_state_.header.frame_id = "base_link";
   joint_state_.position[LEFT] = joints_[LEFT]->GetAngle(0).Radian();
   joint_state_.velocity[LEFT] = joints_[LEFT]->GetVelocity(0);
   joint_state_.position[RIGHT] = joints_[RIGHT]->GetAngle(0).Radian();
@@ -358,20 +391,18 @@ void GazeboRosKobuki::OnUpdate()
   joint_state_pub_.publish(joint_state_);
 
   /*
-   * Odometry
+   * Odometry (encoders & IMU)
    */
   odom_.header.stamp = joint_state_.header.stamp;
   odom_.header.frame_id = "odom";
   odom_.child_frame_id = "base_footprint";
 
-  // Distance travelled by front wheels
+  // Distance travelled by main wheels
   double d1, d2;
   double dr, da;
   d1 = d2 = 0;
   dr = da = 0;
-//  if (set_joints_[LEFT])
   d1 = step_time.Double() * (wheel_diam_ / 2) * joints_[LEFT]->GetVelocity(0);
-//  if (set_joints_[RIGHT])
   d2 = step_time.Double() * (wheel_diam_ / 2) * joints_[RIGHT]->GetVelocity(0);
   // Can see NaN values here, just zero them out if needed
   if (isnan(d1))
@@ -387,16 +418,19 @@ void GazeboRosKobuki::OnUpdate()
     d2 = 0;
   }
   dr = (d1 + d2) / 2;
-  da = (d2 - d1) / wheel_sep_;
+  da = (d2 - d1) / wheel_sep_; // ignored
+
+  // Just as in the Kobuki driver, the angular velocity is taken directly from the IMU
+  vel_angular_ = imu_->GetAngularVelocity();
 
   // Compute odometric pose
   odom_pose_[0] += dr * cos( odom_pose_[2] );
   odom_pose_[1] += dr * sin( odom_pose_[2] );
-  odom_pose_[2] += da;
+  odom_pose_[2] += vel_angular_.z * step_time.Double();
   // Compute odometric instantaneous velocity
   odom_vel_[0] = dr / step_time.Double();
   odom_vel_[1] = 0.0;
-  odom_vel_[2] = da / step_time.Double();
+  odom_vel_[2] = vel_angular_.z;
 
   odom_.pose.pose.position.x = odom_pose_[0];
   odom_.pose.pose.position.y = odom_pose_[1];
@@ -411,17 +445,17 @@ void GazeboRosKobuki::OnUpdate()
 
   odom_.pose.covariance[0]  = 0.1;
   odom_.pose.covariance[7]  = 0.1;
-  odom_.pose.covariance[35] = 0.2;
+  odom_.pose.covariance[35] = 0.05;
   odom_.pose.covariance[14] = 1e6;
   odom_.pose.covariance[21] = 1e6;
   odom_.pose.covariance[28] = 1e6;
 
-  odom_.twist.twist.linear.x = 0;
+  odom_.twist.twist.linear.x = odom_vel_[0];
   odom_.twist.twist.linear.y = 0;
   odom_.twist.twist.linear.z = 0;
   odom_.twist.twist.angular.x = 0;
   odom_.twist.twist.angular.y = 0;
-  odom_.twist.twist.angular.z = 0;
+  odom_.twist.twist.angular.z = odom_vel_[2];
   odom_pub_.publish(odom_); // publish odom message
 
   if (publish_tf_)
@@ -434,6 +468,30 @@ void GazeboRosKobuki::OnUpdate()
     odom_tf_.transform.rotation = odom_.pose.pose.orientation;
     tf_broadcaster_.sendTransform(odom_tf_);
   }
+
+  /*
+   * Publish IMU data
+   */
+  imu_msg_.header = joint_state_.header;
+  math::Quaternion quat = imu_->GetOrientation();
+  imu_msg_.orientation.x = quat.x;
+  imu_msg_.orientation.y = quat.y;
+  imu_msg_.orientation.z = quat.z;
+  imu_msg_.orientation.w = quat.w;
+  imu_msg_.orientation_covariance[0] = 1e6;
+  imu_msg_.orientation_covariance[4] = 1e6;
+  imu_msg_.orientation_covariance[8] = 0.05;
+  imu_msg_.angular_velocity.x = vel_angular_.x;
+  imu_msg_.angular_velocity.y = vel_angular_.y;
+  imu_msg_.angular_velocity.z = vel_angular_.z;
+  imu_msg_.angular_velocity_covariance[0] = 1e6;
+  imu_msg_.angular_velocity_covariance[4] = 1e6;
+  imu_msg_.angular_velocity_covariance[8] = 0.05;
+  math::Vector3 lin_acc = imu_->GetLinearAcceleration();
+  imu_msg_.linear_acceleration.x = lin_acc.x;
+  imu_msg_.linear_acceleration.y = lin_acc.y;
+  imu_msg_.linear_acceleration.z = lin_acc.z;
+  imu_pub_.publish(imu_msg_); // publish odom message
 
   /*
    * Propagate velocity commands
@@ -451,148 +509,162 @@ void GazeboRosKobuki::OnUpdate()
 
   /*
    * Cliff sensors
+   * Check each sensor separately
    */
-  // check current state
-  cliff_event_.sensor = 0;
-  cliff_event_.state = kobuki_msgs::CliffEvent::FLOOR;
-  if (cliff_sensor_left_->GetRange(0) >= cliff_detection_threshold_)
+  // Left cliff sensor
+  if ((cliff_detected_left_ == false) &&
+      (cliff_sensor_left_->GetRange(0) >= cliff_detection_threshold_))
   {
-    cliff_event_.sensor += kobuki_msgs::CliffEvent::LEFT;
+    cliff_detected_left_ = true;
+    cliff_event_.sensor = kobuki_msgs::CliffEvent::LEFT;
     cliff_event_.state = kobuki_msgs::CliffEvent::CLIFF;
-    max_floot_dist_ = cliff_sensor_left_->GetRange(0);
-  }
-  if (cliff_sensor_front_->GetRange(0) >= cliff_detection_threshold_)
-  {
-    cliff_event_.sensor += kobuki_msgs::CliffEvent::CENTER;
-    cliff_event_.state = kobuki_msgs::CliffEvent::CLIFF;
-    if (cliff_sensor_front_->GetRange(0) > max_floot_dist_)
-    {
-      max_floot_dist_ = cliff_sensor_front_->GetRange(0);
-    }
-  }
-  if (cliff_sensor_right_->GetRange(0) >= cliff_detection_threshold_)
-  {
-    cliff_event_.sensor += kobuki_msgs::CliffEvent::RIGHT;
-    cliff_event_.state = kobuki_msgs::CliffEvent::CLIFF;
-    if (cliff_sensor_right_->GetRange(0) > max_floot_dist_)
-    {
-      max_floot_dist_ = cliff_sensor_right_->GetRange(0);
-    }
-  }
-  // Only publish new message, if something has changed
-  if ((cliff_event_.state == kobuki_msgs::CliffEvent::CLIFF)
-      && (cliff_event_.sensor != cliff_event_old_.sensor))
-  {
-//    max_floot_dist_ = static_cast<int>(0.995f / ( tan( static_cast<float>( m_pk.psd[i]) / 76123.0f )
-    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, max_floot_dist_)); // convert distance back to an AD reading
+    // convert distance back to an AD reading
+    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, cliff_sensor_left_->GetRange(0)));
     cliff_event_pub_.publish(cliff_event_);
-    cliff_event_old_ = cliff_event_;
   }
+  else if ((cliff_detected_left_ == true) &&
+            (cliff_sensor_left_->GetRange(0) < cliff_detection_threshold_))
+  {
+    cliff_detected_left_ = false;
+    cliff_event_.sensor = kobuki_msgs::CliffEvent::LEFT;
+    cliff_event_.state = kobuki_msgs::CliffEvent::FLOOR;
+    // convert distance back to an AD reading
+    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, cliff_sensor_left_->GetRange(0)));
+    cliff_event_pub_.publish(cliff_event_);
+  }
+  // Centre cliff sensor
+  if ((cliff_detected_center_ == false) &&
+      (cliff_sensor_center_->GetRange(0) >= cliff_detection_threshold_))
+  {
+    cliff_detected_center_ = true;
+    cliff_event_.sensor = kobuki_msgs::CliffEvent::CENTER;
+    cliff_event_.state = kobuki_msgs::CliffEvent::CLIFF;
+    // convert distance back to an AD reading
+    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, cliff_sensor_center_->GetRange(0)));
+    cliff_event_pub_.publish(cliff_event_);
+  }
+  else if ((cliff_detected_center_ == true) &&
+            (cliff_sensor_center_->GetRange(0) < cliff_detection_threshold_))
+  {
+    cliff_detected_center_ = false;
+    cliff_event_.sensor = kobuki_msgs::CliffEvent::CENTER;
+    cliff_event_.state = kobuki_msgs::CliffEvent::FLOOR;
+    // convert distance back to an AD reading
+    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, cliff_sensor_center_->GetRange(0)));
+    cliff_event_pub_.publish(cliff_event_);
+  }
+  // Right cliff sensor
+  if ((cliff_detected_right_ == false) &&
+      (cliff_sensor_right_->GetRange(0) >= cliff_detection_threshold_))
+  {
+    cliff_detected_right_ = true;
+    cliff_event_.sensor = kobuki_msgs::CliffEvent::RIGHT;
+    cliff_event_.state = kobuki_msgs::CliffEvent::CLIFF;
+    // convert distance back to an AD reading
+    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, cliff_sensor_right_->GetRange(0)));
+    cliff_event_pub_.publish(cliff_event_);
+  }
+  else if ((cliff_detected_right_ == true) &&
+            (cliff_sensor_right_->GetRange(0) < cliff_detection_threshold_))
+  {
+    cliff_detected_right_ = false;
+    cliff_event_.sensor = kobuki_msgs::CliffEvent::RIGHT;
+    cliff_event_.state = kobuki_msgs::CliffEvent::FLOOR;
+    // convert distance back to an AD reading
+    cliff_event_.bottom = (int)(76123.0f * atan2(0.995f, cliff_sensor_right_->GetRange(0)));
+    cliff_event_pub_.publish(cliff_event_);
+  }
+
   /*
    * Bumpers
    */
-  msgs::Contacts contacts;
-  contacts = bumper_->GetContacts();
-//  for (int i = 0; i < contacts.contact_size(); ++i)
-//  {
-//    std::cout << "Collision between[" << contacts.contact(i).collision1()
-//              << "] and [" << contacts.contact(i).collision2() << "]\n";
-//
-//    for (int j = 0; j < contacts.contact(i).position_size(); ++j)
-//    {
-//      std::cout << j << "  Position:"
-//                << contacts.contact(i).position(j).x() << " "
-//                << contacts.contact(i).position(j).y() << " "
-//                << contacts.contact(i).position(j).z() << "\n";
-//      std::cout << "   Normal:"
-//                << contacts.contact(i).normal(j).x() << " "
-//                << contacts.contact(i).normal(j).y() << " "
-//                << contacts.contact(i).normal(j).z() << "\n";
-//      std::cout << "   Depth:" << contacts.contact(i).depth(j) << "\n";
-//    }
-//  }
-
   // In order to simulate the three bumper sensors, a contact is assigned to one of the bumpers
   // depending on its position. Each sensor covers a range of 60 degrees.
   // +90 ... +30: left bumper
   // +30 ... -30: centre bumper
   // -30 ... -90: right bumper
-  bumper_event_.state = 0;
-  bumper_event_.bumper = 0;
-  // flags used for avoiding multiple triggering of the same bumper due to multiple contacts
-  bool bumper_left_pressed = false;
-  bool bumper_centre_pressed = false;
-  bool bumper_right_pressed = false;
 
+  // reset flags
+  bumper_left_is_pressed_ = false;
+  bumper_center_is_pressed_ = false;
+  bumper_right_is_pressed_ = false;
+
+  // parse contacts
+  msgs::Contacts contacts;
+  contacts = bumper_->GetContacts();
+  math::Pose current_pose = model_->GetWorldPose();
+  double robot_heading = current_pose.rot.GetYaw();
 
   for (int i = 0; i < contacts.contact_size(); ++i)
   {
-    if ((contacts.contact(i).position(0).z() >= 0.015)
-        && (contacts.contact(i).position(0).z() <= 0.085)) // only consider contacts at the height of the bumper
+    double rel_contact_pos =  contacts.contact(i).position(0).z() - current_pose.pos.z;
+    if ((rel_contact_pos >= 0.015)
+        && (rel_contact_pos <= 0.085)) // only consider contacts at the height of the bumper
     {
-      math::Pose current_pose = model_->GetWorldPose();
-      double robot_heading = current_pose.rot.GetYaw();
       // using the force normals below, since the contact position is given in world coordinates
-      // negate normal, because it points from contact to robot centre
+      // also negating the normal, because it points from contact to robot centre
       double global_contact_angle = std::atan2(-contacts.contact(i).normal(0).y(), -contacts.contact(i).normal(0).x());
       double relative_contact_angle = global_contact_angle - robot_heading;
 
-//      std::cout << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << std::endl;
-//                std::cout << "   Position:"
-//                          << contacts.contact(i).position(0).x() << " "
-//                          << contacts.contact(i).position(0).y() << " "
-//                          << contacts.contact(i).position(0).z() << "\n";
-//                std::cout << "   Normal:"
-//                          << contacts.contact(i).normal(0).x() << " "
-//                          << contacts.contact(i).normal(0).y() << " "
-//                          << contacts.contact(i).normal(0).z() << "\n";
-//      std::cout << "Current robot heading: " << (robot_heading * (180/M_PI)) << std::endl;
-//      std::cout << "Global contact angle: " << (contact_angle * (180/M_PI)) << std::endl;
-//      std::cout << "Robot contact angle: " << (relative_contact_angle * (180/M_PI)) << std::endl;
       if ((relative_contact_angle <= (M_PI/2)) && (relative_contact_angle > (M_PI/6)))
       {
-        if (!bumper_left_pressed)
-        {
-          bumper_left_pressed = true;
-          bumper_event_.state = kobuki_msgs::BumperEvent::PRESSED;
-          bumper_event_.bumper += kobuki_msgs::BumperEvent::LEFT;
-//          std::cout << "Left bumper pressed." << std::endl;
-//          std::cout << "-----------------------------------------" << std::endl;
-        }
+        bumper_left_is_pressed_ = true;
       }
       else if ((relative_contact_angle <= (M_PI/6)) && (relative_contact_angle >= (-M_PI/6)))
       {
-        if (!bumper_centre_pressed)
-        {
-          bumper_centre_pressed = true;
-          bumper_event_.state = kobuki_msgs::BumperEvent::PRESSED;
-          bumper_event_.bumper += kobuki_msgs::BumperEvent::CENTER;
-//          std::cout << "Centre bumper pressed." << std::endl;
-//          std::cout << "-----------------------------------------" << std::endl;
-        }
+        bumper_center_is_pressed_ = true;
       }
       else if ((relative_contact_angle < (-M_PI/6)) && (relative_contact_angle >= (-M_PI/2)))
       {
-        if (!bumper_right_pressed)
-        {
-          bumper_right_pressed = true;
-          bumper_event_.state = kobuki_msgs::BumperEvent::PRESSED;
-          bumper_event_.bumper += kobuki_msgs::BumperEvent::RIGHT;
-//          std::cout << "Right bumper pressed." << std::endl;
-//          std::cout << "-----------------------------------------" << std::endl;
-        }
+        bumper_right_is_pressed_ = true;
       }
     }
   }
-  // Only publish new message, if something has changed
-  if ((bumper_event_.state != bumper_event_old_.state)
-      || (bumper_event_.bumper != bumper_event_old_.bumper))
+
+  // check for bumper state change
+  if (bumper_left_is_pressed_ && !bumper_left_was_pressed_)
   {
+    bumper_left_was_pressed_ = true;
+    bumper_event_.state = kobuki_msgs::BumperEvent::PRESSED;
+    bumper_event_.bumper = kobuki_msgs::BumperEvent::LEFT;
     bumper_event_pub_.publish(bumper_event_);
-    bumper_event_old_ = bumper_event_;
+  }
+  else if (!bumper_left_is_pressed_ && bumper_left_was_pressed_)
+  {
+    bumper_left_was_pressed_ = false;
+    bumper_event_.state = kobuki_msgs::BumperEvent::RELEASED;
+    bumper_event_.bumper = kobuki_msgs::BumperEvent::LEFT;
+    bumper_event_pub_.publish(bumper_event_);
+  }
+  if (bumper_center_is_pressed_ && !bumper_center_was_pressed_)
+  {
+    bumper_center_was_pressed_ = true;
+    bumper_event_.state = kobuki_msgs::BumperEvent::PRESSED;
+    bumper_event_.bumper = kobuki_msgs::BumperEvent::CENTER;
+    bumper_event_pub_.publish(bumper_event_);
+  }
+  else if (!bumper_center_is_pressed_ && bumper_center_was_pressed_)
+  {
+    bumper_center_was_pressed_ = false;
+    bumper_event_.state = kobuki_msgs::BumperEvent::RELEASED;
+    bumper_event_.bumper = kobuki_msgs::BumperEvent::CENTER;
+    bumper_event_pub_.publish(bumper_event_);
+  }
+  if (bumper_right_is_pressed_ && !bumper_right_was_pressed_)
+  {
+    bumper_right_was_pressed_ = true;
+    bumper_event_.state = kobuki_msgs::BumperEvent::PRESSED;
+    bumper_event_.bumper = kobuki_msgs::BumperEvent::RIGHT;
+    bumper_event_pub_.publish(bumper_event_);
+  }
+  else if (!bumper_right_is_pressed_ && bumper_right_was_pressed_)
+  {
+    bumper_right_was_pressed_ = false;
+    bumper_event_.state = kobuki_msgs::BumperEvent::RELEASED;
+    bumper_event_.bumper = kobuki_msgs::BumperEvent::RIGHT;
+    bumper_event_pub_.publish(bumper_event_);
   }
 }
-
 
 void GazeboRosKobuki::spin()
 {
