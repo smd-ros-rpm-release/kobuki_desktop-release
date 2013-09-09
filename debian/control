@@ -1,0 +1,12 @@
+Source: ros-hydro-kobuki-dashboard
+Section: misc
+Priority: extra
+Maintainer: Marcus Liebhardt <marcus.liebhardt@yujinrobot.com>
+Build-Depends: debhelper (>= 7.0.50~), ros-hydro-catkin, ros-hydro-kobuki-msgs, ros-hydro-rospy, ros-hydro-rqt-robot-dashboard
+Homepage: http://ros.org/wiki/kobuki_dashboard
+Standards-Version: 3.9.2
+
+Package: ros-hydro-kobuki-dashboard
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-hydro-kobuki-msgs, ros-hydro-rospy, ros-hydro-rqt-robot-dashboard
+Description: The Kobuki dashboard is a RQT-based plug-in for visualising data from Kobuki and giving easy access to basic functionalities.
