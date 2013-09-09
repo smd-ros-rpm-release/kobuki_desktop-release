@@ -1,0 +1,15 @@
+ros-hydro-kobuki-qtestsuite (0.3.0-1raring) raring; urgency=high
+
+  * adds bugtracker and repo info to package.xml
+  * bugfix new matdataplot api with resizing the plot
+
+ -- Daniel Stonier <stonier@yujinrobot.com>  Thu, 29 Aug 2013 15:00:00 -0000
+
+ros-hydro-kobuki-qtestsuite (0.2.0-1raring) raring; urgency=high
+
+  * ROS Hydro beta release.
+  * Adds catkinized kobuki_qtestsuite
+
+ -- Daniel Stonier <stonier@yujinrobot.com>  Wed, 10 Jul 2013 15:00:00 -0000
+
+
