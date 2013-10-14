@@ -1,0 +1,23 @@
+ros-hydro-kobuki-gazebo-plugins (0.3.1-0precise) precise; urgency=high
+
+  * fixes gazebo header paths (refs #22 <https://github.com/yujinrobot/kobuki_desktop/issues/22>)
+
+ -- Marcus Liebhardt <marcus.liebhardt@yujinrobot.com>  Sun, 13 Oct 2013 15:00:00 -0000
+
+ros-hydro-kobuki-gazebo-plugins (0.3.0-0precise) precise; urgency=high
+
+  * fixes bumper & cliff event publishing
+  * adds reset odometry and fixes imu and odom data processing
+  * adds IMU data processing
+  * adds bugtracker and repo info to package.xml
+
+ -- Marcus Liebhardt <marcus.liebhardt@yujinrobot.com>  Thu, 29 Aug 2013 15:00:00 -0000
+
+ros-hydro-kobuki-gazebo-plugins (0.2.0-0precise) precise; urgency=high
+
+  * ROS Hydro beta release.
+  * Adds catkinized kobuki_qtestsuite
+
+ -- Marcus Liebhardt <marcus.liebhardt@yujinrobot.com>  Wed, 10 Jul 2013 15:00:00 -0000
+
+
