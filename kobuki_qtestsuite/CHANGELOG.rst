@@ -2,6 +2,13 @@
 Changelog for package kobuki_dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.2 (2014-04-23)
+------------------
+* removes email addresses from authors
+* add robot groups for rqt plugins
+* add robot groups for rqt plugins
+* Contributors: Dirk Thomas, Marcus Liebhardt
+
 0.3.1 (2013-10-14)
 ------------------
 
