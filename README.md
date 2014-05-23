@@ -1,3 +1,28 @@
+## kobuki_desktop (hydro) - 0.3.2-1
+
+The packages in the `kobuki_desktop` repository were released into the `hydro` distro by running `/usr/bin/bloom-release kobuki_desktop -t hydro -r hydro` on `Fri, 23 May 2014 01:51:19 -0000`
+
+These packages were released:
+- `kobuki_dashboard`
+- `kobuki_desktop`
+- `kobuki_gazebo`
+- `kobuki_gazebo_plugins`
+- `kobuki_qtestsuite`
+- `kobuki_rviz_launchers`
+
+Version of package(s) in repository `kobuki_desktop`:
+- rosdistro version: `0.3.2-0`
+- old version: `0.3.2-0`
+- new version: `0.3.2-1`
+
+Versions of tools used:
+- bloom version: `0.5.9`
+- catkin_pkg version: `0.2.2`
+- rosdep version: `0.10.27`
+- rosdistro version: `0.3.5`
+- vcstools version: `0.1.35`
+
+
 ## kobuki_desktop (hydro) - 0.3.2-0
 
 The packages in the `kobuki_desktop` repository were released into the `hydro` distro by running `/usr/bin/bloom-release kobuki_desktop --track=hydro --rosdistro=hydro` on `Wed, 23 Apr 2014 00:16:04 -0000`
