@@ -1,0 +1,12 @@
+Source: ros-hydro-kobuki-desktop
+Section: misc
+Priority: extra
+Maintainer: Marcus Liebhardt <marcus.liebhardt@yujinrobot.com>
+Build-Depends: debhelper (>= 9.0.0), ros-hydro-catkin
+Homepage: http://ros.org/wiki/kobuki_desktop
+Standards-Version: 3.9.2
+
+Package: ros-hydro-kobuki-desktop
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-hydro-kobuki-dashboard, ros-hydro-kobuki-gazebo, ros-hydro-kobuki-gazebo-plugins, ros-hydro-kobuki-qtestsuite, ros-hydro-kobuki-rviz-launchers
+Description: Visualisation and simulation tools for Kobuki
