@@ -1,0 +1,12 @@
+Source: ros-hydro-kobuki-qtestsuite
+Section: misc
+Priority: extra
+Maintainer: Daniel Stonier <stonier@yujinrobot.com>
+Build-Depends: debhelper (>= 9.0.0), pyqt4-dev-tools, ros-hydro-catkin, ros-hydro-geometry-msgs, ros-hydro-kobuki-testsuite, ros-hydro-nav-msgs, ros-hydro-qt-gui-py-common, ros-hydro-rospy, ros-hydro-rqt-gui, ros-hydro-rqt-gui-py, ros-hydro-rqt-plot, ros-hydro-rqt-py-common
+Homepage: http://ros.org/wiki/kobuki_qtestsuite
+Standards-Version: 3.9.2
+
+Package: ros-hydro-kobuki-qtestsuite
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, pyqt4-dev-tools, ros-hydro-geometry-msgs, ros-hydro-kobuki-testsuite, ros-hydro-nav-msgs, ros-hydro-qt-gui-py-common, ros-hydro-rospy, ros-hydro-rqt-gui, ros-hydro-rqt-gui-py, ros-hydro-rqt-plot, ros-hydro-rqt-py-common
+Description: An rqt plugin that provides a graphical, interactive testsuite for Kobuki.
