@@ -2,10 +2,7 @@
 Changelog for package kobuki_dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.3.3 (2014-08-05)
-------------------
-
-0.3.2 (2014-04-23)
+0.4.0 (2014-08-11)
 ------------------
 * removes email addresses from authors
 * adds package for rviz launchers

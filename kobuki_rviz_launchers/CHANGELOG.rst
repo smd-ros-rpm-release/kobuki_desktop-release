@@ -2,18 +2,24 @@
 Changelog for package kobuki_rviz_launchers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.4.0 (2014-08-11)
+------------------
+* removes email addresses from authors
+* adds package for rviz launchers
+* Contributors: Marcus Liebhardt
+
 0.3.3 (2014-08-05)
 ------------------
+* update changelog
+* Contributors: Jihoon Lee
 
 0.3.2 (2014-04-23)
 ------------------
+* update changelog
+* update package version
 * removes email addresses from authors
 * adds package for rviz launchers
-* Contributors: Marcus Liebhardt
-
-* removes email addresses from authors
-* adds package for rviz launchers
-* Contributors: Marcus Liebhardt
+* Contributors: Jihoon Lee, Marcus Liebhardt
 
 0.3.1 (2013-10-14)
 ------------------

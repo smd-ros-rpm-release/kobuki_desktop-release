@@ -2,19 +2,13 @@
 Changelog for package kobuki_dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.3.3 (2014-08-05)
+0.4.0 (2014-08-11)
 ------------------
-* Fix compilation on OS X.
-  - without this linking fails on OS X (10.9)
-  - prefer find_package over pkg-config, since pkg-config does not link
-  transitive dependencies (see https://bitbucket.org/osrf/gazebo/issue/1202)
-* Contributors: Nikolaus Demmel
-
-0.3.2 (2014-04-23)
-------------------
+* cherry-picking `#30 <https://github.com/yujinrobot/kobuki_desktop/issues/30>`_
+* trivial update.
 * removes email addresses from authors
 * replace deprecated shared_dynamic_cast (fixes `#25 <https://github.com/yujinrobot/kobuki_desktop/issues/25>`_)
-* Contributors: Marcus Liebhardt, Samir Benmendil
+* Contributors: Daniel Stonier, Marcus Liebhardt, Nikolaus Demmel, Samir Benmendil
 
 0.3.1 (2013-10-14)
 ------------------
