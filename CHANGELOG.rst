@@ -2,6 +2,9 @@
 Changelog for package kobuki_dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.4.1 (2014-09-19)
+------------------
+
 0.4.0 (2014-08-11)
 ------------------
 * now it uses Rqt DataPlot instead our own version
